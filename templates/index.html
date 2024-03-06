@@ -1,0 +1,61 @@
+{% include "header.html" %}
+
+<!-- Page Header-->
+<header
+  class="masthead"
+  style="background-image: url('../static/assets/img/home-bg.jpeg')"
+>
+  <div class="container position-relative px-4 px-lg-5">
+    <div class="row gx-4 gx-lg-5 justify-content-center">
+      <div class="col-md-10 col-lg-8 col-xl-7">
+        <div class="site-heading">
+          <h1>London Cafe's</h1>
+          <span class="subheading">List of all Cafe's</span>
+          <hr class="my-4" />
+        </div>
+      </div>
+    </div>
+  </div>
+</header>
+<!-- Main Content-->
+<div class="container px-4 px-lg-5">
+  <div class="row gx-4 gx-lg-5 justify-content-center">
+    <div class="col-md-10 col-lg-8 col-xl-7">
+      <!-- Post preview-->
+      {% for cafe in all_cafes %}
+      <div class="post-preview">
+        <a href="{{ url_for('show_cafe', cafe_id=cafe.id) }}">
+          <h2 class="post-title">{{ cafe.name }}</h2>
+          <h3 class="post-subtitle">{{ cafe.location }}</h3>
+        </a>
+        <!-- TODO: Add code to delete posts below -->
+        <p class="post-meta">
+<!--          Posted by-->
+<!--          <a href="#">{{cafe.author}}</a>-->
+<!--          on {{cafe.date}}-->
+          <a href="{{url_for('delete_cafe', cafe_id=cafe.id)}}">✘</a>
+        </p>
+      </div>
+      <!-- Divider-->
+      <hr class="my-4" />
+      {% endfor %}
+
+      <!-- New Post -->
+      <div class="d-flex justify-content-end mb-4">
+      <!-- Adding new cafe -->
+        <a
+          class="btn btn-primary float-right"
+          href="{{url_for('add_new_cafe')}}"
+          >Add New Cafe</a
+        >
+      </div>
+
+      <!-- Pager-->
+<!--      <div class="d-flex justify-content-end mb-4">-->
+<!--        <a class="btn btn-secondary text-uppercase" href="#!">Older Posts →</a>-->
+<!--      </div>-->
+    </div>
+  </div>
+</div>
+
+{% include "footer.html" %}
