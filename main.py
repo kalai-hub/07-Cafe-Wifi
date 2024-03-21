@@ -83,7 +83,7 @@ with app.app_context():
     db.create_all()
 
 
-# TODO: Use Werkzeug to hash the user's password when creating a new user.
+# hash the user's password when creating a new user.
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     form = RegisterForm()
@@ -105,7 +105,7 @@ def register():
     return render_template("register.html", form=form)
 
 
-# TODO: Retrieve a user from the database based on their email.
+# Retrieve a user from the database based on their email.
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     form = LoginForm()
@@ -130,7 +130,7 @@ def logout():
     return redirect(url_for('home'))
 
 
-# TODO: Use a decorator so only an admin user can create a new post
+# Using decorator so only an admin user can create a new post
 def admin_only(fun):
     @wraps(fun)
     def decorated_function(*args, **kwargs):
