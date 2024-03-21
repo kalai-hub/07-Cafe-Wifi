@@ -6,13 +6,28 @@ from flask_bootstrap import Bootstrap5
 from flask_wtf import FlaskForm
 from wtforms import StringField, SubmitField, BooleanField
 from wtforms.validators import DataRequired, URL
+from flask_login import UserMixin, login_user, LoginManager, current_user, logout_user
+from forms import RegisterForm, LoginForm
+from flask import Flask, abort, render_template, redirect, url_for, flash
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from werkzeug.security import generate_password_hash, check_password_hash
 import random
+from functools import wraps
+import os
 
 app = Flask(__name__)
 
-app.config['SECRET_KEY'] = '8BYkEfBA6O6donzWlSihBXox7C0sKR6b'
+app.config['SECRET_KEY'] = os.environ.get('FLASK_KEY')
 
 Bootstrap5(app)
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+
+
+@login_manager.user_loader
+def load_user(user_id):
+    return db.session.get(User, user_id)
 
 
 # CREATE DB
@@ -21,7 +36,8 @@ class Base(DeclarativeBase):
 
 
 # Connect to Database
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///cafes.db'
+# app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///cafes.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DB_URI", "sqlite:///posts.db")
 db = SQLAlchemy(model_class=Base)
 db.init_app(app)
 
@@ -41,6 +57,14 @@ class Cafe(db.Model):
     coffee_price: Mapped[str] = mapped_column(String(250), nullable=True)
 
 
+class User(UserMixin, db.Model):
+    __tablename__ = "users"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email: Mapped[str] = mapped_column(String(100), unique=True)
+    password: Mapped[str] = mapped_column(String(100))
+    name: Mapped[str] = mapped_column(String(1000))
+
+
 class MyForm(FlaskForm):
     name = StringField(label="Cafe Name", validators=[DataRequired()])
     location = StringField(label="Location", validators=[DataRequired()])
@@ -53,6 +77,78 @@ class MyForm(FlaskForm):
     sockets = BooleanField(label="Sockets")
     calls = BooleanField(label="Can take calls")
     submit = SubmitField(label="Submit")
+
+
+with app.app_context():
+    db.create_all()
+
+
+# TODO: Use Werkzeug to hash the user's password when creating a new user.
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    form = RegisterForm()
+    if form.validate_on_submit():
+        email = form.email.data
+        user_exist = db.session.execute(db.select(User).where(User.email == email)).scalar()
+        if user_exist:
+            flash("You have already signed up with that email, please login.")
+            return redirect(url_for('login'))
+        new_user = User(
+            email=form.email.data,
+            password=generate_password_hash(form.password.data, method='pbkdf2:sha256', salt_length=8),
+            name=form.name.data
+        )
+        db.session.add(new_user)
+        db.session.commit()
+        login_user(new_user)
+        return redirect(url_for('home'))
+    return render_template("register.html", form=form)
+
+
+# TODO: Retrieve a user from the database based on their email.
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    form = LoginForm()
+    if form.validate_on_submit():
+        email = form.email.data
+        user = db.session.execute(db.select(User).where(User.email == email)).scalar()
+        if user is None:
+            flash("The email doesn't exist, please try again")
+            return redirect(url_for('login'))
+        elif check_password_hash(user.password, form.password.data):
+            login_user(user)
+            return redirect(url_for('home'))
+        else:
+            flash("Password incorrect, please try again")
+            return redirect(url_for('login'))
+    return render_template("login.html", form=form)
+
+
+@app.route('/logout')
+def logout():
+    logout_user()
+    return redirect(url_for('home'))
+
+
+# TODO: Use a decorator so only an admin user can create a new post
+def admin_only(fun):
+    @wraps(fun)
+    def decorated_function(*args, **kwargs):
+        if current_user.get_id() != '1':
+            return abort(403)
+        return fun(*args, **kwargs)
+
+    return decorated_function
+
+
+def user_only(fun):
+    @wraps(fun)
+    def decorated_function(*args, **kwargs):
+        if not current_user.get_id():
+            return abort(403)
+        return fun(*args, **kwargs)
+
+    return decorated_function
 
 
 @app.route("/")
@@ -89,12 +185,14 @@ def show_cafe(cafe_id):
     requested_cafe = db.session.get(Cafe, cafe_id)
     return render_template("cafe.html", cafe=requested_cafe)
 
+
 # Add cafe
 @app.route("/new-cafe", methods=['GET', 'POST'])
+@user_only
 def add_new_cafe():
     form = MyForm()
     if form.validate_on_submit():
-        new_post = Cafe(
+        new_cafe = Cafe(
             name=form.name.data,
             location=form.location.data,
             seats=form.seats.data,
@@ -106,13 +204,14 @@ def add_new_cafe():
             has_sockets=form.sockets.data,
             can_take_calls=form.calls.data
         )
-        db.session.add(new_post)
+        db.session.add(new_cafe)
         db.session.commit()
         return redirect(url_for('all_cafe'))
     return render_template('make-cafe.html', form=form)
 
 
 @app.route("/edit-cafe/<int:cafe_id>", methods=['GET', 'POST'])
+@admin_only
 def edit_cafe(cafe_id):
     edit = True
     cafe = db.session.get(Cafe, cafe_id)
@@ -154,38 +253,24 @@ def location():
     return jsonify(cafes=[to_dict(cafe) for cafe in all_cafes])
 
 
-# HTTP POST - Create Record
-
-@app.route("/add", methods=['POST'])
-def add_cafe():
-    name = request.form['name']
-    map_url = request.form['map_url']
-    add_user_cafe = Cafe(
-        name=request.form.get("name"),
-        map_url=request.form.get("map_url"),
-        img_url=request.form.get("img_url"),
-        location=request.form.get("loc"),
-        has_sockets=bool(request.form.get("sockets")),
-        has_toilet=bool(request.form.get("toilet")),
-        has_wifi=bool(request.form.get("wifi")),
-        can_take_calls=bool(request.form.get("calls")),
-        seats=request.form.get("seats"),
-        coffee_price=request.form.get("coffee_price")
-    )
-    print(name)
-    print(map_url)
-    db.session.add(add_user_cafe)
-    db.session.commit()
-    return jsonify(response={"success": "Successfully added new cafe"})
-
 # Delete Cafe
 @app.route("/delete/<int:cafe_id>")
+@admin_only
 def delete_cafe(cafe_id):
     cafe = db.session.get(Cafe, cafe_id)
     db.session.delete(cafe)
     db.session.commit()
     return redirect(url_for('all_cafe'))
 
+@app.route("/about")
+def about():
+    return render_template("about.html")
+
+
+@app.route("/contact")
+def contact():
+    return render_template("contact.html")
+
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=False)
