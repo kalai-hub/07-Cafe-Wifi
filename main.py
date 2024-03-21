@@ -1,6 +1,5 @@
 from flask import Flask, jsonify, render_template, request, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 from sqlalchemy import Integer, String, Boolean
 from flask_bootstrap import Bootstrap5
 from flask_wtf import FlaskForm
@@ -21,6 +20,7 @@ app.config['SECRET_KEY'] = os.environ.get('FLASK_KEY')
 
 Bootstrap5(app)
 
+# Configure Flask-Login
 login_manager = LoginManager()
 login_manager.init_app(app)
 
